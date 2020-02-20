@@ -1,6 +1,5 @@
 <?php
 
-
 namespace App\Solvers;
 
 use App\Solvers\Contracts\ProvidesSolution;
