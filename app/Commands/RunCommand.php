@@ -71,9 +71,7 @@ class RunCommand extends Command
         fclose($inFileStream);
 
         /** @var ProvidesSolution $solver */
-        $solver = app($solverClassName, [
-            'dataSet' => $dataSet,
-        ]);
+        $solver = app($solverClassName, compact('dataSet'));
 
         $result = $solver->solutionResult();
 
