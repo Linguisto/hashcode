@@ -24,17 +24,19 @@ class RunCommand extends Command
         parent::__construct();
     }
 
-    public function handle(): int
+    protected function validateFilePath(): bool
     {
-        $this->inFilePath = $this->argument('filepath');
-        $this->solverName = $this->argument('solver');
-
         if (! file_exists($this->inFilePath)) {
             $this->error('Please, provide a valid file path');
 
-            return static::INVALID;
+            return false;
         }
 
+        return true;
+    }
+
+    protected function resolveSolverClass(): ?string
+    {
         $solverClassName = 'App\\Solvers\\' . Str::studly($this->solverName);
 
         if (! class_exists($solverClassName)) {
@@ -43,16 +45,21 @@ class RunCommand extends Command
             if (! class_exists($solverClassName)) {
                 $this->error('Please, provide a valid solver name');
 
-                return static::INVALID;
+                return null;
             }
         }
 
         if (! is_subclass_of($solverClassName, ProvidesSolution::class)) {
             $this->error("{$solverClassName} must implement interface " . ProvidesSolution::class);
 
-            return static::INVALID;
+            return null;
         }
 
+        return $solverClassName;
+    }
+
+    protected function getDataSet(): array
+    {
         $inFileStream = fopen($this->inFilePath, 'r');
         flock($inFileStream, LOCK_EX);
 
@@ -70,8 +77,22 @@ class RunCommand extends Command
         flock($inFileStream, LOCK_UN);
         fclose($inFileStream);
 
+        return $dataSet;
+    }
+
+    public function handle(): int
+    {
+        $this->inFilePath = $this->argument('filepath');
+        $this->solverName = $this->argument('solver');
+
+        if (! $this->validateFilePath() || ! $solverClassName = $this->resolveSolverClass()) {
+            return static::INVALID;
+        }
+
         /** @var ProvidesSolution $solver */
-        $solver = app($solverClassName, compact('dataSet'));
+        $solver = app($solverClassName, [
+            'dataSet' => $this->getDataSet(),
+        ]);
 
         $result = $solver->solutionResult();
 
