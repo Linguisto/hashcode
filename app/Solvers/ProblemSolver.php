@@ -5,25 +5,12 @@ namespace App\Solvers;
 use App\Solvers\Contracts\ProvidesSolution;
 use Illuminate\Support\Collection;
 
-/**
- * Class DataParser
- *
- * @package App\Services
- */
 abstract class ProblemSolver implements ProvidesSolution
 {
-    /**
-     * @var Collection
-     */
-    protected $dataSet;
+    protected Collection $dataSet;
 
-    /**
-     * ProblemSolver constructor.
-     *
-     * @param array $dataSet
-     */
-    public function __construct(array $dataSet)
+    public function __construct(array|Collection $dataSet)
     {
-        $this->dataSet = $dataSet;
+        $this->dataSet = collect($dataSet);
     }
 }

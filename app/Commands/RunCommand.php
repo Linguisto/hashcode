@@ -2,96 +2,73 @@
 
 namespace App\Commands;
 
-use App\Solvers\Contracts\CalculatesPreliminaryScore;
+use Illuminate\Support\Arr;
+use Illuminate\Support\Str;
 use App\Solvers\Contracts\ProvidesSolution;
-use Illuminate\Contracts\Filesystem\Filesystem;
-use Illuminate\Support\{Arr, Str};
 use LaravelZero\Framework\Commands\Command;
-use League\Flysystem\Util;
+use Illuminate\Contracts\Filesystem\Filesystem;
+use App\Solvers\Contracts\CalculatesPreliminaryScore;
 
-/**
- * Class RunCommand
- *
- * @package App\Commands
- */
 class RunCommand extends Command
 {
-    /**
-     * The signature of the command.
-     *
-     * @var string
-     */
     protected $signature = 'run {filepath} {solver}';
 
-    /**
-     * The description of the command.
-     *
-     * @var string
-     */
     protected $description = 'Run HashCode solution';
 
-    /**
-     * @var Filesystem
-     */
-    protected $filesystem;
+    protected string $inFilePath;
 
-    /**
-     * @var string
-     */
-    protected $inFilePath;
+    protected array|string|null $solverName;
 
-    /**
-     * @var array|string|null
-     */
-    protected $solverName;
-
-    /**
-     * RunCommand constructor.
-     *
-     * @param Filesystem $filesystem
-     */
-    public function __construct(Filesystem $filesystem)
+    public function __construct(protected Filesystem $filesystem)
     {
         parent::__construct();
-
-        $this->filesystem = $filesystem;
     }
 
-    /**
-     * Handle
-     */
-    public function handle()
+    public function handle(): int
     {
-        $this->inFilePath = Util::normalizePath($this->argument('filepath'));
+        $this->inFilePath = $this->argument('filepath');
         $this->solverName = $this->argument('solver');
 
         if (! file_exists($this->inFilePath)) {
             $this->error('Please, provide a valid file path');
-            die;
+
+            return static::INVALID;
         }
 
-        $solverClassName = 'App\\Solvers\\' . Str::studly($this->solverName . 'Solver');
+        $solverClassName = 'App\\Solvers\\' . Str::studly($this->solverName);
+
         if (! class_exists($solverClassName)) {
-            $this->error('Please, provide a valid solver name');
-            die;
+            $solverClassName = $solverClassName . 'Solver';
+
+            if (! class_exists($solverClassName)) {
+                $this->error('Please, provide a valid solver name');
+
+                return static::INVALID;
+            }
         }
 
         if (! is_subclass_of($solverClassName, ProvidesSolution::class)) {
-            $this->error("$solverClassName must implement interface " . ProvidesSolution::class);
-            die;
+            $this->error("{$solverClassName} must implement interface " . ProvidesSolution::class);
+
+            return static::INVALID;
         }
 
-        $inFile = fopen($this->inFilePath, 'r');
+        $inFileStream = fopen($this->inFilePath, 'r');
+        flock($inFileStream, LOCK_EX);
+
         $dataSet = [];
 
-        while (! feof($inFile)) {
-            $line = trim(fgets($inFile));
+        while (! feof($inFileStream)) {
+            $line = trim(fgets($inFileStream));
             if (empty($line)) {
                 continue;
             }
 
             $dataSet[] = explode(' ', $line);
         }
+
+        flock($inFileStream, LOCK_UN);
+        fclose($inFileStream);
 
         /** @var ProvidesSolution $solver */
         $solver = app($solverClassName, [
@@ -105,34 +82,44 @@ class RunCommand extends Command
         if ($solver instanceof CalculatesPreliminaryScore) {
             $this->info("Preliminary score: {$solver->preliminaryScore()}");
         }
+
+        return static::SUCCESS;
     }
 
-    /**
-     * @param array $result
-     *
-     * @return string
-     */
     protected function writeOutFile(array $result): string
     {
+        $result = array_values($result);
+
         $outFilePath = 'out' . DIRECTORY_SEPARATOR . $this->solverName . DIRECTORY_SEPARATOR . str_replace(
                 'in',
                 'out',
                 Arr::last(explode('/', $this->inFilePath))
             );
 
-        if ($this->filesystem->has($outFilePath)) {
+        if ($this->filesystem->exists($outFilePath)) {
             $this->filesystem->delete($outFilePath);
         }
 
-        foreach ($result as $item) {
+        $stream = tmpfile();
+
+        foreach ($result as $index => $item) {
             $value = $item;
             if (is_array($item)) {
                 $value = implode(' ', $item);
             }
 
-            $this->filesystem->append($outFilePath, $value);
+            if ($index < count($result) - 1) {
+                $value .= PHP_EOL;
+            }
+
+            fwrite($stream, $value);
         }
 
-        return storage_path($outFilePath);
+        fsync($stream);
+
+        $this->filesystem->writeStream($outFilePath, $stream);
+        fclose($stream);
+
+        return app_path($outFilePath);
     }
 }

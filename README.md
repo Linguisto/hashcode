@@ -3,7 +3,7 @@
 This is a simple solution for Google Hashcode competitors which prefer PHP, especially laravel. This framework is
  based on the [Laravel Zero](https://github.com/laravel-zero/laravel-zero) framework. 
  
- It utilizes the core HashCode operations letting the competitors concentrate on the solution of the problem.
+It utilizes the core HashCode operations letting the competitors concentrate on the solution of the problem.
 
 ## Usage
 
@@ -17,19 +17,20 @@ the output will also have a preliminary calculated score of your solution.
 
 ### CLI
 
-```$xslt
+```bash
 php hashcode run {filepath} {solver}
-```   
+```
 
 This command accepts 2 parameters:
 
 `filepath` - the path to your `.in` file
 
-`solver` - your solver name. E.g. for `MySolver` class this parameter should be `my`. 
+`solver` - your solver name. If your class name has a `Solver` keyword it can be omitted. E.g. for `MySolver` class 
+this parameter should be `my`. 
 
 ##### Example usage for MySolver class
 
-```$xslt
+```bash
 php hashcode run /path/to/file.in my
 ``` 
 
